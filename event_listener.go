@@ -7,5 +7,5 @@ import (
 type ListenerConfig map[string]interface{}
 
 type EventListener interface {
-	Listen() (topicsOutChannels map[string]chan *types.WrappedEvent,errors chan error)
+	Listen() (out chan *types.WrappedEvent,errors chan error)
 }

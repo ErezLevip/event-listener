@@ -18,6 +18,7 @@ import (
 const ZOOKEEPER_CONNECTION_STRING = "zookeeper_connection_string"
 const TOPICS = "topics"
 const CONSUMER_RETURN_ERRORS = "consumer_return_errors"
+const CONSUMER_GROUP = "consumer_group"
 
 type KafkaEventListener struct {
 	kafkaConfig *sarama.Config
@@ -45,24 +46,18 @@ func NewKafkaEventListener(config io.Reader) (EventListener, error) {
 		kafkaConfig: kafkaConfig,
 		topics:      topics,
 		zookeeper:   zookeeper,
-		group:serializedConfig["group"],
+		group:       serializedConfig[CONSUMER_GROUP],
 	}, nil
 }
 
-func (l *KafkaEventListener) Listen() (topicsOutChannels map[string]chan *types.WrappedEvent, errors chan error) {
-	errors = make(chan error)
-
-	topicsOutChannels = make(map[string]chan *types.WrappedEvent, len(l.topics))
-
-	for _, t := range l.topics {
-		topicsOutChannels[t] = make(chan *types.WrappedEvent)
-	}
+func (l *KafkaEventListener) Listen() (chan *types.WrappedEvent, chan error) {
+	errors := make(chan error)
 	cg, _ := initConsumer(l.topics, l.group, l.zookeeper)
-	consume(cg, topicsOutChannels)
+	out := consume(l.topics, cg)
 
 	//consume(topicsOutChannels, errors, l.consumer)
 	log.Println("listening on", l.topics)
-	return
+	return out,errors
 }
 
 func initConsumer(topics []string, cgroup string, zookeeperConn []string) (*consumergroup.ConsumerGroup, error) {
@@ -80,25 +75,35 @@ func initConsumer(topics []string, cgroup string, zookeeperConn []string) (*cons
 	return cg, err
 }
 
-func consume(cg *consumergroup.ConsumerGroup, out map[string]chan *types.WrappedEvent) {
-	log.Println("waiting for messages")
-	for {
-		select {
-		case msg := <-cg.Messages():
+func consume(topics []string, cg *consumergroup.ConsumerGroup) chan *types.WrappedEvent {
+	out := make(chan *types.WrappedEvent)
+	go func() {
+		defer close(out)
+		log.Println("waiting for messages")
+		for msg := range cg.Messages() {
 			log.Println("message inbound", string(msg.Key))
 			// messages coming through chanel
 			// only take messages from subscribed topic
 
-			if _, valid := out[msg.Topic]; !valid {
+			valid := false
+			for _, t := range topics {
+				if t == msg.Topic {
+					valid = true
+					break
+				}
+			}
+
+			if !valid {
 				continue
 			}
 
 			go func() {
-
-				out[msg.Topic] <- &types.WrappedEvent{
+				out <- &types.WrappedEvent{
 					Ack:   true,
 					Value: bytes.NewReader(msg.Value),
+					Topic: msg.Topic,
 				}
+				log.Println("written to", msg.Topic)
 
 				// commit to zookeeper that message is read
 				// this prevent read message multiple times after restart
@@ -108,7 +113,8 @@ func consume(cg *consumergroup.ConsumerGroup, out map[string]chan *types.Wrapped
 				}
 			}()
 		}
-	}
+	}()
+	return out
 }
 
 func serializeConfig(reader io.Reader) (map[string]string, error) {

@@ -13,6 +13,7 @@ type Event struct {
 type WrappedEvent struct{
 	Ack bool
 	Value io.Reader
+	Topic string
 }
 
 func (we *WrappedEvent) ReadAll() ([]byte,error)  {

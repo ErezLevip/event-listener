@@ -12,8 +12,9 @@ import (
 func main() {
 	listenerConfig := make(map[string]interface{})
 	listenerConfig[event_listener.CONSUMER_RETURN_ERRORS] = strconv.FormatBool(true)
-	listenerConfig[event_listener.TOPICS] = "comments"
+	listenerConfig[event_listener.TOPICS] = ""
 	listenerConfig[event_listener.ZOOKEEPER_CONNECTION_STRING] = ""
+	listenerConfig[event_listener.CONSUMER_GROUP] = "group1"
 
 	jsonConfig,_ := json.Marshal(listenerConfig)
 
@@ -23,16 +24,14 @@ func main() {
 		log.Panic(err)
 	}
 
-	topicsOutChannels := make(map[string]chan *types.WrappedEvent)
+	out := make(chan *types.WrappedEvent)
 	errOut :=make( chan error)
 
-	go func() {
-		topicsOutChannels,errOut = el.Listen()
-	}()
+		out,errOut = el.Listen()
 
 	go func() {
-		for t,c := range topicsOutChannels{
-			go processTopic(t,c)
+		for msg := range out{
+			process(msg)
 		}
 	}()
 
@@ -46,8 +45,7 @@ func main() {
 }
 
 
-func processTopic(topic string,events chan *types.WrappedEvent){
-	for e := range events{
+func process(e *types.WrappedEvent){
 		data,err := e.ReadAll()
 		if err != nil{
 			log.Fatal(err)
@@ -57,8 +55,7 @@ func processTopic(topic string,events chan *types.WrappedEvent){
 		if err != nil{
 			log.Fatal(err)
 		}
-		log.Println("this is a new event, consumed from topic",topic)
+		log.Println("this is a new event, consumed from topic",e.Topic)
 		log.Println(msg)
-	}
 }
 
