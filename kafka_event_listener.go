@@ -19,12 +19,37 @@ const ZOOKEEPER_CONNECTION_STRING = "zookeeper_connection_string"
 const TOPICS = "topics"
 const CONSUMER_RETURN_ERRORS = "consumer_return_errors"
 const CONSUMER_GROUP = "consumer_group"
+const MAX_BUFFER_SIZE = "max_buffer_size"
+
+const METADATA_KEY_PARTITION = "partition"
+const METADATA_KEY_OFFSET = "offset"
 
 type KafkaEventListener struct {
-	kafkaConfig *sarama.Config
-	topics      []string
-	zookeeper   []string
-	group       string
+	kafkaConfig    *sarama.Config
+	topics         []string
+	zookeeper      []string
+	group          string
+	maxBufferSize  int64
+	consumerGroups map[string]*consumergroup.ConsumerGroup
+}
+
+func (el *KafkaEventListener) Ack(msg *types.WrappedEvent) error {
+	partition, err := strconv.Atoi(msg.Metadata[METADATA_KEY_PARTITION])
+	if err != nil {
+		return err
+	}
+
+	offset, err := strconv.ParseInt(msg.Metadata[METADATA_KEY_OFFSET], 10, 64)
+	err = el.consumerGroups[msg.Topic].CommitUpto(&sarama.ConsumerMessage{
+		Topic:     msg.Topic,
+		Partition: int32(partition),
+		Offset:    offset,
+	})
+
+	if err != nil {
+		fmt.Println("Error commit zookeeper: ", err.Error())
+	}
+	return err
 }
 
 func NewKafkaEventListener(config io.Reader) (EventListener, error) {
@@ -42,37 +67,59 @@ func NewKafkaEventListener(config io.Reader) (EventListener, error) {
 
 	topics := strings.Split(serializedConfig[TOPICS], ",")
 
+	maxBufferSize, err := strconv.ParseInt(serializedConfig[MAX_BUFFER_SIZE], 10, 64)
+	if err != nil {
+		return nil, err
+	}
+
 	return &KafkaEventListener{
-		kafkaConfig: kafkaConfig,
-		topics:      topics,
-		zookeeper:   zookeeper,
-		group:       serializedConfig[CONSUMER_GROUP],
+		kafkaConfig:   kafkaConfig,
+		topics:        topics,
+		zookeeper:     zookeeper,
+		group:         serializedConfig[CONSUMER_GROUP],
+		maxBufferSize: maxBufferSize,
 	}, nil
 }
 
-func (l *KafkaEventListener) Listen() (chan *types.WrappedEvent, chan error) {
+func (l *KafkaEventListener) Listen() (map[string]chan *types.WrappedEvent, chan error) {
 	errors := make(chan error)
-	cg, _ := initConsumer(l.topics, l.group, l.zookeeper)
-	out := consume(l.topics, cg)
+	cgs, err := l.initConsumer(l.topics, l.group, l.zookeeper, l.maxBufferSize)
+	if err != nil {
+		log.Panic(err)
+	}
 
-	//consume(topicsOutChannels, errors, l.consumer)
-	log.Println("listening on", l.topics)
-	return out,errors
+	outMap := make(map[string]chan *types.WrappedEvent, len(l.topics))
+
+	for t, cg := range cgs {
+		log.Println("listening on", l.topics)
+		outMap[t] = consume(l.topics, cg)
+	}
+
+	return outMap, errors
 }
 
-func initConsumer(topics []string, cgroup string, zookeeperConn []string) (*consumergroup.ConsumerGroup, error) {
+func (l *KafkaEventListener) initConsumer(topics []string, cgroup string, zookeeperConn []string, maxBufferSize int64) (map[string]*consumergroup.ConsumerGroup, error) {
 	// consumer config
 	config := consumergroup.NewConfig()
 	config.Offsets.Initial = sarama.OffsetOldest
 	config.Offsets.ProcessingTimeout = 10 * time.Second
 
-	// join to consumer group
-	cg, err := consumergroup.JoinConsumerGroup(cgroup, topics, zookeeperConn, config)
-	if err != nil {
-		return nil, err
+	if maxBufferSize > 0 {
+		config.ChannelBufferSize = int(maxBufferSize)
 	}
 
-	return cg, err
+	l.consumerGroups = make(map[string]*consumergroup.ConsumerGroup, len(topics))
+
+	for _, t := range topics {
+		// join to consumer group
+		cg, err := consumergroup.JoinConsumerGroup(cgroup, []string{t}, zookeeperConn, config)
+		if err != nil {
+			return nil, err
+		}
+		l.consumerGroups[t] = cg
+	}
+
+	return l.consumerGroups, nil
 }
 
 func consume(topics []string, cg *consumergroup.ConsumerGroup) chan *types.WrappedEvent {
@@ -99,18 +146,21 @@ func consume(topics []string, cg *consumergroup.ConsumerGroup) chan *types.Wrapp
 
 			go func() {
 				out <- &types.WrappedEvent{
-					Ack:   true,
 					Value: bytes.NewReader(msg.Value),
 					Topic: msg.Topic,
+					Metadata: map[string]string{
+						METADATA_KEY_PARTITION: strconv.Itoa(int(msg.Partition)),
+						METADATA_KEY_OFFSET:    strconv.FormatInt(msg.Offset, 10),
+					},
 				}
 				log.Println("written to", msg.Topic)
 
 				// commit to zookeeper that message is read
 				// this prevent read message multiple times after restart
-				err := cg.CommitUpto(msg)
+				/*err := cg.CommitUpto(msg)
 				if err != nil {
 					fmt.Println("Error commit zookeeper: ", err.Error())
-				}
+				}*/
 			}()
 		}
 	}()

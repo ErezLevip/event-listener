@@ -11,9 +11,9 @@ type Event struct {
 }
 
 type WrappedEvent struct{
-	Ack bool
 	Value io.Reader
 	Topic string
+	Metadata map[string]string
 }
 
 func (we *WrappedEvent) ReadAll() ([]byte,error)  {
