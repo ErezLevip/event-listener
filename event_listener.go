@@ -7,6 +7,5 @@ import (
 type ListenerConfig map[string]interface{}
 
 type EventListener interface {
-	Listen() (out map[string]chan *types.WrappedEvent, errors chan error)
-	Ack(msg *types.WrappedEvent) error
+	Listen() (out map[string]<- chan *types.WrappedEvent, errors map[string]<- chan error)
 }

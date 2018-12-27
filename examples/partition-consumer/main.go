@@ -25,15 +25,13 @@ func main() {
 		log.Panic(err)
 	}
 
-	out := make(map[string]chan *types.WrappedEvent)
-	errOut := make(chan error)
-
-	out, errOut = el.Listen()
+	out, errOut := el.Listen()
 
 	for _, ch := range out {
 		go func() {
 			for msg := range ch {
 				process(msg)
+				msg.Ack()
 			}
 		}()
 	}

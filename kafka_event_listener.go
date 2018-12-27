@@ -3,7 +3,6 @@ package event_listener
 import (
 	"bytes"
 	"encoding/json"
-	"fmt"
 	"github.com/erezlevip/event-listener/types"
 	"io"
 	"log"
@@ -32,7 +31,7 @@ type KafkaEventListener struct {
 	maxBufferSize  int64
 	consumerGroups map[string]*consumergroup.ConsumerGroup
 }
-
+/*
 func (el *KafkaEventListener) Ack(msg *types.WrappedEvent) error {
 	partition, err := strconv.Atoi(msg.Metadata[METADATA_KEY_PARTITION])
 	if err != nil {
@@ -50,7 +49,7 @@ func (el *KafkaEventListener) Ack(msg *types.WrappedEvent) error {
 		fmt.Println("Error commit zookeeper: ", err.Error())
 	}
 	return err
-}
+}*/
 
 func NewKafkaEventListener(config io.Reader) (EventListener, error) {
 	serializedConfig, err := serializeConfig(config)
@@ -81,21 +80,23 @@ func NewKafkaEventListener(config io.Reader) (EventListener, error) {
 	}, nil
 }
 
-func (l *KafkaEventListener) Listen() (map[string]chan *types.WrappedEvent, chan error) {
-	errors := make(chan error)
+func (l *KafkaEventListener) Listen() (map[string]<-chan *types.WrappedEvent, map[string]<- chan error) {
+
 	cgs, err := l.initConsumer(l.topics, l.group, l.zookeeper, l.maxBufferSize)
 	if err != nil {
 		log.Panic(err)
 	}
 
-	outMap := make(map[string]chan *types.WrappedEvent, len(l.topics))
+	outMap := make(map[string]<-chan *types.WrappedEvent, len(l.topics))
+	errors := make(map[string]<-chan error, len(l.topics))
 
 	for t, cg := range cgs {
 		log.Println("listening on", l.topics)
 		outMap[t] = consume(l.topics, cg)
+		errors[t] = cg.Errors()
 	}
 
-	return outMap, errors
+	return outMap,errors
 }
 
 func (l *KafkaEventListener) initConsumer(topics []string, cgroup string, zookeeperConn []string, maxBufferSize int64) (map[string]*consumergroup.ConsumerGroup, error) {
@@ -151,6 +152,9 @@ func consume(topics []string, cg *consumergroup.ConsumerGroup) chan *types.Wrapp
 					Metadata: map[string]string{
 						METADATA_KEY_PARTITION: strconv.Itoa(int(msg.Partition)),
 						METADATA_KEY_OFFSET:    strconv.FormatInt(msg.Offset, 10),
+					},
+					Ack: func() error {
+						return cg.CommitUpto(msg)
 					},
 				}
 				log.Println("written to", msg.Topic)

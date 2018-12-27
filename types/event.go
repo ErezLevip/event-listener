@@ -14,6 +14,7 @@ type WrappedEvent struct{
 	Value io.Reader
 	Topic string
 	Metadata map[string]string
+	Ack func() error
 }
 
 func (we *WrappedEvent) ReadAll() ([]byte,error)  {
