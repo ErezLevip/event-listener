@@ -3,15 +3,14 @@ package event_listener
 import (
 	"bytes"
 	"encoding/json"
+	"github.com/Shopify/sarama"
 	"github.com/erezlevip/event-listener/types"
+	"github.com/wvanbergen/kafka/consumergroup"
 	"io"
 	"log"
 	"strconv"
 	"strings"
 	"time"
-
-	"github.com/Shopify/sarama"
-	"github.com/wvanbergen/kafka/consumergroup"
 )
 
 const ZOOKEEPER_CONNECTION_STRING = "zookeeper_connection_string"
@@ -31,25 +30,6 @@ type KafkaEventListener struct {
 	maxBufferSize  int64
 	consumerGroups map[string]*consumergroup.ConsumerGroup
 }
-/*
-func (el *KafkaEventListener) Ack(msg *types.WrappedEvent) error {
-	partition, err := strconv.Atoi(msg.Metadata[METADATA_KEY_PARTITION])
-	if err != nil {
-		return err
-	}
-
-	offset, err := strconv.ParseInt(msg.Metadata[METADATA_KEY_OFFSET], 10, 64)
-	err = el.consumerGroups[msg.Topic].CommitUpto(&sarama.ConsumerMessage{
-		Topic:     msg.Topic,
-		Partition: int32(partition),
-		Offset:    offset,
-	})
-
-	if err != nil {
-		fmt.Println("Error commit zookeeper: ", err.Error())
-	}
-	return err
-}*/
 
 func NewKafkaEventListener(config io.Reader) (EventListener, error) {
 	serializedConfig, err := serializeConfig(config)
@@ -130,8 +110,6 @@ func consume(topics []string, cg *consumergroup.ConsumerGroup) chan *types.Wrapp
 		log.Println("waiting for messages")
 		for msg := range cg.Messages() {
 			log.Println("message inbound", string(msg.Key))
-			// messages coming through chanel
-			// only take messages from subscribed topic
 
 			valid := false
 			for _, t := range topics {
@@ -158,13 +136,6 @@ func consume(topics []string, cg *consumergroup.ConsumerGroup) chan *types.Wrapp
 					},
 				}
 				log.Println("written to", msg.Topic)
-
-				// commit to zookeeper that message is read
-				// this prevent read message multiple times after restart
-				/*err := cg.CommitUpto(msg)
-				if err != nil {
-					fmt.Println("Error commit zookeeper: ", err.Error())
-				}*/
 			}()
 		}
 	}()

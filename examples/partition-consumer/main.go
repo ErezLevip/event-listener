@@ -55,5 +55,4 @@ func process(e *types.WrappedEvent) {
 		log.Fatal(err)
 	}
 	log.Println("this is a new event, consumed from topic", e.Topic)
-	log.Println(msg)
 }
