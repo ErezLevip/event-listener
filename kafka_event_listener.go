@@ -23,12 +23,36 @@ const METADATA_KEY_PARTITION = "partition"
 const METADATA_KEY_OFFSET = "offset"
 
 type KafkaEventListener struct {
-	kafkaConfig    *sarama.Config
+	config         *sarama.Config
 	topics         []string
 	zookeeper      []string
 	group          string
 	maxBufferSize  int64
 	consumerGroups map[string]*consumergroup.ConsumerGroup
+}
+
+func NewKafkaEventListenerWithSaramaConfig(scfg *sarama.Config,cfg io.Reader) (EventListener, error) {
+	serializedConfig, err := serializeConfig(cfg)
+	if err != nil {
+		return nil, err
+	}
+
+	zookeeper := strings.Split(serializedConfig[ZOOKEEPER_CONNECTION_STRING], ",")
+
+	topics := strings.Split(serializedConfig[TOPICS], ",")
+
+	maxBufferSize, err := strconv.ParseInt(serializedConfig[MAX_BUFFER_SIZE], 10, 64)
+	if err != nil {
+		return nil, err
+	}
+
+	return &KafkaEventListener{
+		config:        scfg,
+		topics:        topics,
+		zookeeper:     zookeeper,
+		group:         serializedConfig[CONSUMER_GROUP],
+		maxBufferSize: maxBufferSize,
+	}, nil
 }
 
 func NewKafkaEventListener(config io.Reader) (EventListener, error) {
@@ -52,7 +76,7 @@ func NewKafkaEventListener(config io.Reader) (EventListener, error) {
 	}
 
 	return &KafkaEventListener{
-		kafkaConfig:   kafkaConfig,
+		config:        kafkaConfig,
 		topics:        topics,
 		zookeeper:     zookeeper,
 		group:         serializedConfig[CONSUMER_GROUP],
