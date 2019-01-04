@@ -13,6 +13,8 @@ import (
 	"time"
 )
 
+const PROCESSING_TIMEOUT  = "processing_timeout"
+const INITIAL_OFFSET= "initial_offset"
 const ZOOKEEPER_CONNECTION_STRING = "zookeeper_connection_string"
 const TOPICS = "topics"
 const CONSUMER_RETURN_ERRORS = "consumer_return_errors"
@@ -23,15 +25,16 @@ const METADATA_KEY_PARTITION = "partition"
 const METADATA_KEY_OFFSET = "offset"
 
 type KafkaEventListener struct {
-	config         *sarama.Config
+	saramaConfig   *sarama.Config
 	topics         []string
 	zookeeper      []string
 	group          string
 	maxBufferSize  int64
 	consumerGroups map[string]*consumergroup.ConsumerGroup
+	config         map[string]string
 }
 
-func NewKafkaEventListenerWithSaramaConfig(scfg *sarama.Config,cfg io.Reader) (EventListener, error) {
+func NewKafkaEventListenerWithSaramaConfig(scfg *sarama.Config, cfg io.Reader) (EventListener, error) {
 	serializedConfig, err := serializeConfig(cfg)
 	if err != nil {
 		return nil, err
@@ -47,7 +50,7 @@ func NewKafkaEventListenerWithSaramaConfig(scfg *sarama.Config,cfg io.Reader) (E
 	}
 
 	return &KafkaEventListener{
-		config:        scfg,
+		saramaConfig:  scfg,
 		topics:        topics,
 		zookeeper:     zookeeper,
 		group:         serializedConfig[CONSUMER_GROUP],
@@ -76,15 +79,16 @@ func NewKafkaEventListener(config io.Reader) (EventListener, error) {
 	}
 
 	return &KafkaEventListener{
-		config:        kafkaConfig,
+		saramaConfig:  kafkaConfig,
 		topics:        topics,
 		zookeeper:     zookeeper,
 		group:         serializedConfig[CONSUMER_GROUP],
 		maxBufferSize: maxBufferSize,
+		config:        serializedConfig,
 	}, nil
 }
 
-func (l *KafkaEventListener) Listen() (map[string]<-chan *types.WrappedEvent, map[string]<- chan error) {
+func (l *KafkaEventListener) Listen() (map[string]<-chan *types.WrappedEvent, map[string]<-chan error) {
 
 	cgs, err := l.initConsumer(l.topics, l.group, l.zookeeper, l.maxBufferSize)
 	if err != nil {
@@ -100,14 +104,22 @@ func (l *KafkaEventListener) Listen() (map[string]<-chan *types.WrappedEvent, ma
 		errors[t] = cg.Errors()
 	}
 
-	return outMap,errors
+	return outMap, errors
 }
 
 func (l *KafkaEventListener) initConsumer(topics []string, cgroup string, zookeeperConn []string, maxBufferSize int64) (map[string]*consumergroup.ConsumerGroup, error) {
-	// consumer config
+	// consumer saramaConfig
 	config := consumergroup.NewConfig()
-	config.Offsets.Initial = sarama.OffsetOldest
-	config.Offsets.ProcessingTimeout = 10 * time.Second
+	initialOffset,err := getInitialOffset(l.config)
+	if err != nil{
+		return nil,err
+	}
+	config.Offsets.Initial = initialOffset
+	processingTimeout,err :=  getProcessingTimeout(l.config)
+	if err != nil{
+		return nil,err
+	}
+	config.Offsets.ProcessingTimeout = processingTimeout
 
 	if maxBufferSize > 0 {
 		config.ChannelBufferSize = int(maxBufferSize)
@@ -205,4 +217,17 @@ func serializeSaramaConfig(consumerConfig map[string]string) (*sarama.Config, er
 		}
 	}
 	return config, nil
+}
+
+func getInitialOffset(config map[string]string) (int64,error)  {
+	if val,ok := config[INITIAL_OFFSET];ok{
+		return strconv.ParseInt(val,10,64)
+	}
+	return sarama.OffsetOldest,nil
+}
+func getProcessingTimeout(config map[string]string) (time.Duration,error)  {
+	if val,ok := config[PROCESSING_TIMEOUT];ok{
+		return time.ParseDuration(val)
+	}
+	return  10 * time.Second ,nil
 }
