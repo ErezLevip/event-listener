@@ -2,14 +2,6 @@ package types
 
 import "io"
 
-type Event struct {
-	EntityId  string `json:"entity_id"`
-	EventType string `json:"event_type"`
-	Id        string `json:"id"`
-	Payload   string `json:"payload"`
-	CreatedAt string `json:"created_at"`
-}
-
 type WrappedEvent struct{
 	Value io.Reader
 	Topic string
