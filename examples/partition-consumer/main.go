@@ -13,7 +13,7 @@ func main() {
 	listenerConfig := make(map[string]interface{})
 	listenerConfig[event_listener.CONSUMER_RETURN_ERRORS] = strconv.FormatBool(true)
 	listenerConfig[event_listener.TOPICS] = ""
-	listenerConfig[event_listener.ZOOKEEPER_CONNECTION_STRING] = ""
+	listenerConfig[event_listener.KAFKA_BROKERS_CONNECTION_STRING] = ""
 	listenerConfig[event_listener.CONSUMER_GROUP] = "group1"
 	listenerConfig[event_listener.MAX_BUFFER_SIZE] = "0"
 
