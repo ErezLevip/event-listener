@@ -1,12 +1,14 @@
 package main
-
+/*
 import (
 	"bytes"
 	"encoding/json"
+	"github.com/Shopify/sarama"
 	"github.com/erezlevip/event-listener"
 	"github.com/erezlevip/event-listener/types"
 	"log"
 	"strconv"
+	"time"
 )
 
 func main() {
@@ -17,9 +19,18 @@ func main() {
 	listenerConfig[event_listener.CONSUMER_GROUP] = "group1"
 	listenerConfig[event_listener.MAX_BUFFER_SIZE] = "0"
 
-	jsonConfig, _ := json.Marshal(listenerConfig)
+	config := &event_listener.ListenerConfig{
+		ReturnNotifications:true,
+		Connection:"localhost",
+		Topics: []string{"test"},
+		InitialOffset:sarama.OffsetOldest,
+		ProcessingTimeout:10 * time.Second,
+		ConsumerGroup:"group11",
+		ReturnErrors:true,
+		MaxBufferSize:1234,
+	}
 
-	el, err := event_listener.NewKafkaEventListener(bytes.NewReader(jsonConfig))
+	el, err := event_listener.NewKafkaEventListener(config,nil)
 
 	if err != nil {
 		log.Panic(err)
@@ -44,7 +55,7 @@ func main() {
 	<-make(chan bool)
 }
 
-func process(e *types.WrappedEvent) {
+func process(e *event_listener.WrappedEvent) {
 	data, err := e.ReadAll()
 	if err != nil {
 		log.Fatal(err)
@@ -56,3 +67,4 @@ func process(e *types.WrappedEvent) {
 	}
 	log.Println("this is a new event, consumed from topic", e.Topic)
 }
+*/

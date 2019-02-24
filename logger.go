@@ -1,4 +1,4 @@
-package acceptable_interfaces
+package event_listener
 
 type Logger interface{
 	Debug(args ...interface{})
