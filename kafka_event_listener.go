@@ -98,10 +98,9 @@ func (l *KafkaEventListener) consume(topics []string, cg *cluster.Consumer) chan
 					METADATA_KEY_PARTITION: strconv.Itoa(int(msg.Partition)),
 					METADATA_KEY_OFFSET:    strconv.FormatInt(msg.Offset, 10),
 				},
-				Ack: func() error {
+				Ack: func() {
 					l.logger.Debug(fmt.Sprintf("committing partition %v, offset %v", msg.Partition, msg.Offset))
 					cg.MarkOffset(msg,"")
-					return cg.CommitOffsets()
 				},
 			}
 			l.logger.Debug(fmt.Sprintf("written to %s", msg.Topic))

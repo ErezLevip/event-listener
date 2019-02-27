@@ -9,7 +9,7 @@ type WrappedEvent struct {
 	Value    io.Reader
 	Topic    string
 	Metadata map[string]string
-	Ack      func() error
+	Ack      func()
 }
 
 func (we *WrappedEvent) PipedRead() (io.ReadCloser, error) {
