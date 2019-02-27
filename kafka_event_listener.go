@@ -100,6 +100,7 @@ func (l *KafkaEventListener) consume(topics []string, cg *cluster.Consumer) chan
 				},
 				Ack: func() error {
 					l.logger.Debug(fmt.Sprintf("committing partition %v, offset %v", msg.Partition, msg.Offset))
+					cg.MarkOffset(msg,"")
 					return cg.CommitOffsets()
 				},
 			}
